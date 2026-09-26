@@ -1,5 +1,6 @@
 import numpy as np
 
+from artai.agent.baselines import RandomAgent, heuristic_action
 from artai.env.redteam_env import ACTIONS, RedTeamEnv, decode, encode
 
 
@@ -68,3 +69,43 @@ def test_episode_terminates_or_truncates():
         if done:
             break
     assert done
+
+
+def _run_episode(env, policy_fn, seed):
+    obs, info = env.reset(seed=seed)
+    total, done, won = 0.0, False, False
+    while not done:
+        a = policy_fn(obs, info["action_mask"])
+        obs, r, term, trunc, info = env.step(a)
+        total += r
+        won = won or (term and r > 10)  # collect lands the win reward
+        done = term or trunc
+    return total, won, info
+
+
+def test_heuristic_completes_kill_chain():
+    wins = 0
+    for seed in range(10):
+        env = RedTeamEnv()
+        _, won, _ = _run_episode(
+            env, lambda o, m: heuristic_action(m, env.max_nodes), seed
+        )
+        wins += won
+    assert wins >= 5  # should win on most seeds; 5/10 guards against breakage
+
+
+def test_env_deterministic_under_seed():
+    def traj(seed):
+        env = RedTeamEnv()
+        obs, info = env.reset(seed=seed)
+        agent = RandomAgent(seed=seed)
+        out = []
+        for _ in range(20):
+            a = agent.act(obs, info["action_mask"])
+            obs, r, t, tr, info = env.step(a)
+            out.append((a, round(r, 6)))
+            if t or tr:
+                break
+        return out
+
+    assert traj(11) == traj(11)

@@ -136,6 +136,9 @@ def generate(seed: int, n_workstations: int = 3, n_servers: int = 3) -> Network:
             candidates = [n for n in nodes if nodes[n].tier > node.tier - 1 and n != nid]
             if candidates:
                 node.credentials.append(rng.choice(candidates))
+        # keep every node ownable — no unreachable pockets in the arena
+        if node.tier > 0 and not node.vulns:
+            node.vulns.append(Vuln(technique_id=rng.choice(_REMOTE_TECHNIQUES)))
 
     # guarantee a viable path of vulns for the heuristic baseline
     nodes[entry].vulns.append(Vuln(technique_id="T1190"))

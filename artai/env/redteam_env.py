@@ -45,7 +45,7 @@ class RedTeamEnv(gym.Env):
         self.max_steps = max_steps
         self.defender = defender
         self.catalog = catalog or load_catalog()
-        self.max_nodes = 2 + n_workstations + n_servers  # edge + dc + tiers
+        self.max_nodes = 3 + n_workstations + n_servers  # edge + dc + cj + tiers
         self.rng = np.random.default_rng()
         self.net: net_mod.Network | None = None
 
@@ -126,8 +126,12 @@ class RedTeamEnv(gym.Env):
         elif self.step_count >= self.max_steps:
             truncated = True
 
+        mask = self.action_mask()
+        if not terminated and mask.sum() == 0:
+            terminated = True  # attacker out of moves — contained
+
         info = {
-            "action_mask": self.action_mask(),
+            "action_mask": mask,
             "techniques": list(self.technique_log),
             "detected": list(self.detection_log),
         }
