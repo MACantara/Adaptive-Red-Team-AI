@@ -1,0 +1,122 @@
+# ATT&CK technique catalog — the single source of truth for what an
+# attack action requires, costs, and how loud it is.
+# Fields: name, tactic, action, requires[], detectability(0-1), cost, success(0-1)
+# requires draws from: discovered, reachable, credential, user_access, root,
+# remote_vuln, local_vuln, not_isolated, crown_jewel
+
+T1046:
+  name: Network Service Discovery
+  tactic: Discovery
+  action: scan
+  requires: [user_access]
+  detectability: 0.25
+  cost: 1
+  success: 1.0
+
+T1018:
+  name: Remote System Discovery
+  tactic: Discovery
+  action: scan
+  requires: [user_access]
+  detectability: 0.2
+  cost: 1
+  success: 1.0
+
+T1087:
+  name: Account Discovery
+  tactic: Discovery
+  action: enumerate
+  requires: [reachable, not_isolated]
+  detectability: 0.15
+  cost: 1
+  success: 1.0
+
+T1190:
+  name: Exploit Public-Facing Application
+  tactic: Initial Access
+  action: exploit
+  requires: [discovered, reachable, remote_vuln, not_isolated]
+  detectability: 0.5
+  cost: 2
+  success: 0.85
+
+T1210:
+  name: Exploitation of Remote Services
+  tactic: Lateral Movement
+  action: exploit
+  requires: [discovered, reachable, remote_vuln, not_isolated]
+  detectability: 0.45
+  cost: 2
+  success: 0.8
+
+T1357:
+  name: Exploit via Unpatched Service
+  tactic: Initial Access
+  action: exploit
+  requires: [discovered, reachable, remote_vuln, not_isolated]
+  detectability: 0.4
+  cost: 2
+  success: 0.8
+
+T1068:
+  name: Exploitation for Privilege Escalation
+  tactic: Privilege Escalation
+  action: privesc
+  requires: [user_access, local_vuln]
+  detectability: 0.35
+  cost: 2
+  success: 0.85
+
+T1078:
+  name: Valid Accounts
+  tactic: Privilege Escalation
+  action: privesc
+  requires: [user_access, local_vuln]
+  detectability: 0.15
+  cost: 1
+  success: 0.95
+
+T1003:
+  name: OS Credential Dumping
+  tactic: Credential Access
+  action: dump_creds
+  requires: [user_access]
+  detectability: 0.6
+  cost: 2
+  success: 0.9
+
+T1021:
+  name: Remote Services
+  tactic: Lateral Movement
+  action: lateral
+  requires: [discovered, reachable, credential, not_isolated]
+  detectability: 0.3
+  cost: 2
+  success: 0.9
+
+T1550:
+  name: Use Alternate Authentication Material
+  tactic: Lateral Movement
+  action: lateral
+  requires: [discovered, reachable, credential, not_isolated]
+  detectability: 0.25
+  cost: 2
+  success: 0.85
+
+T1053:
+  name: Scheduled Task/Job
+  tactic: Persistence
+  action: persist
+  requires: [root]
+  detectability: 0.4
+  cost: 2
+  success: 0.9
+
+T1041:
+  name: Exfiltration Over C2 Channel
+  tactic: Exfiltration
+  action: collect
+  requires: [root, crown_jewel, not_isolated]
+  detectability: 0.7
+  cost: 3
+  success: 1.0
