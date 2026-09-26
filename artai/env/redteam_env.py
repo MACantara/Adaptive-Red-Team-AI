@@ -21,6 +21,7 @@ NODE_FEATURES = 10
 
 WIN_REWARD = 15.0
 BURNED_PENALTY = -15.0
+CONTAINED_PENALTY = -5.0
 DETECT_PENALTY = -2.0
 FIRST_CRED_BONUS = 3.0
 FIRST_ROOT_BONUS = 3.0
@@ -95,6 +96,7 @@ class RedTeamEnv(gym.Env):
         reward = -0.1
         self.detected_last = 0.0
         self._last_success = False
+        self._det_reward = 0.0
         self.step_count += 1
 
         tech = self._technique_for(name, node, arg)
@@ -106,6 +108,7 @@ class RedTeamEnv(gym.Env):
             success = self.rng.random() < tech.success
             reward += self._apply(name, node, arg, tech, success)
             self._detection_roll(tech, node)
+            reward += self._det_reward
 
         if self.defender is not None:
             d_name, d_node = self.defender.act(self._defender_view(), self.rng)
@@ -129,6 +132,7 @@ class RedTeamEnv(gym.Env):
         mask = self.action_mask()
         if not terminated and mask.sum() == 0:
             terminated = True  # attacker out of moves — contained
+            reward += CONTAINED_PENALTY
 
         info = {
             "action_mask": mask,
@@ -207,10 +211,14 @@ class RedTeamEnv(gym.Env):
 
     def _valid(self, a_type: int, node_id: int, arg: int) -> bool:
         node = self.net.nodes[node_id]
-        tech = self._technique_for(ACTIONS[a_type], node, arg)
+        name = ACTIONS[a_type]
+        # arg only indexes vuln lists; arg-free actions live at arg==0
+        if name not in ("exploit", "privesc") and arg > 0:
+            return False
+        tech = self._technique_for(name, node, arg)
         return (
             tech is not None
-            and self._useful(ACTIONS[a_type], node, arg)
+            and self._useful(name, node, arg)
             and all(self._has_req(r, node, arg) for r in tech.requires)
         )
 
@@ -234,7 +242,9 @@ class RedTeamEnv(gym.Env):
 
         if name == "scan":
             for m in self.net.links[node.id] | {node.id}:
-                self.net.nodes[m].discovered = True
+                if not self.net.nodes[m].discovered:
+                    self.net.nodes[m].discovered = True
+                    reward += 0.3  # recon yield
         elif name == "enumerate":
             node.vulns_known = node.creds_known = True
         elif name in ("exploit", "lateral"):
@@ -263,6 +273,7 @@ class RedTeamEnv(gym.Env):
             node.alert += 1.0
             self.detected_last = 1.0
             self.detection_log.append(tech.id)
+            self._det_reward += DETECT_PENALTY
 
     # ---------- defender ----------
 
@@ -279,6 +290,8 @@ class RedTeamEnv(gym.Env):
         if node_id is None or node_id not in self.net.nodes:
             return
         node = self.net.nodes[node_id]
+        if node.tier == 0 and action in ("isolate", "patch"):
+            return  # the edge is the internet — evictable, not hardenable
         if action == "isolate":
             node.isolated = True
         elif action == "reimage":
@@ -297,6 +310,36 @@ class RedTeamEnv(gym.Env):
         # investigate: reveals truth to a human defender; no env effect
 
     # ---------- observation ----------
+
+    def state_key(self) -> tuple:
+        """Compact hashable state for tabular learners.
+
+        Per-node status code + coarse global context. Deliberately lossy —
+        tabular Q-learning needs a small reachable state space.
+        """
+        per_node = []
+        for i in range(self.max_nodes):
+            n = self.net.nodes[i]
+            if not n.discovered:
+                code = 0
+            elif not n.vulns_known:
+                code = 1
+            elif not n.owned:
+                code = 2
+            elif not n.root:
+                code = 3
+            else:
+                code = 4
+            if n.isolated:
+                code += 5
+            per_node.append(code)
+        return (
+            tuple(per_node),
+            min(len(self.creds), 4),
+            self.last_def_action,
+            int(self.detected_last),
+            sum(n.alert > 0 for n in self.net.nodes.values()),
+        )
 
     def _obs(self) -> np.ndarray:
         n = self.max_nodes

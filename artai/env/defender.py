@@ -18,11 +18,14 @@ class NoOpDefender:
 class RandomDefender:
     name = "random"
 
+    def __init__(self, probability: float = 0.3):
+        self.probability = probability
+
     def act(self, view, rng):
         nodes = list(view["nodes"])
-        action = rng.choice(["pass", "isolate", "reimage", "patch", "decoy"])
-        if action == "pass" or not nodes:
+        if rng.random() >= self.probability or not nodes:
             return "pass", None
+        action = rng.choice(["isolate", "reimage", "patch", "decoy"])
         return action, int(nodes[rng.integers(len(nodes))])
 
 
