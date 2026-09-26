@@ -144,6 +144,8 @@ def generate(seed: int, n_workstations: int = 3, n_servers: int = 3) -> Network:
     nodes[dc].local_vulns.append(Vuln(technique_id="T1068", remote=False))
     if not any(cj in n.credentials for n in nodes.values()):
         nodes[dc].credentials.append(cj)
+    if not nodes[cj].local_vulns:
+        nodes[cj].local_vulns.append(Vuln(technique_id="T1068", remote=False))
 
     nodes[entry].discovered = True
     return Network(nodes=nodes, links=links, entry_point=entry, crown_jewel=cj)
