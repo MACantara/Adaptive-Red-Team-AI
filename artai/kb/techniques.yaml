@@ -8,7 +8,7 @@ T1046:
   name: Network Service Discovery
   tactic: Discovery
   action: scan
-  requires: [user_access]
+  requires: [user_access, not_isolated]
   detectability: 0.25
   cost: 1
   success: 1.0
@@ -17,7 +17,7 @@ T1018:
   name: Remote System Discovery
   tactic: Discovery
   action: scan
-  requires: [user_access]
+  requires: [user_access, not_isolated]
   detectability: 0.2
   cost: 1
   success: 1.0
@@ -62,7 +62,7 @@ T1068:
   name: Exploitation for Privilege Escalation
   tactic: Privilege Escalation
   action: privesc
-  requires: [user_access, local_vuln]
+  requires: [user_access, local_vuln, not_isolated]
   detectability: 0.35
   cost: 2
   success: 0.85
@@ -71,7 +71,7 @@ T1078:
   name: Valid Accounts
   tactic: Privilege Escalation
   action: privesc
-  requires: [user_access, local_vuln]
+  requires: [user_access, local_vuln, not_isolated]
   detectability: 0.15
   cost: 1
   success: 0.95
@@ -80,7 +80,7 @@ T1003:
   name: OS Credential Dumping
   tactic: Credential Access
   action: dump_creds
-  requires: [user_access]
+  requires: [user_access, not_isolated]
   detectability: 0.6
   cost: 2
   success: 0.9
@@ -107,7 +107,7 @@ T1053:
   name: Scheduled Task/Job
   tactic: Persistence
   action: persist
-  requires: [root]
+  requires: [root, not_isolated]
   detectability: 0.4
   cost: 2
   success: 0.9

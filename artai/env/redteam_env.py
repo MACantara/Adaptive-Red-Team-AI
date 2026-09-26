@@ -141,8 +141,11 @@ class RedTeamEnv(gym.Env):
 
     def _reachable(self, node_id: int) -> bool:
         if node_id == self.net.entry_point:
-            return True
-        return any(self.net.nodes[m].owned for m in self.net.links[node_id])
+            return not self.net.nodes[node_id].isolated
+        return any(
+            self.net.nodes[m].owned and not self.net.nodes[m].isolated
+            for m in self.net.links[node_id]
+        )
 
     def _has_req(self, req: str, node, arg: int) -> bool:
         if req == "discovered":
