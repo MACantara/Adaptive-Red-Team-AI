@@ -20,12 +20,14 @@ from artai.env.redteam_env import RedTeamEnv
 from artai.profiles import policy_path
 
 DEFENDER_POPULATION = ("noop", "random", "patch_on_alert", "scan_and_reimage")
+CURRICULUM_TIERS = ("noop", "patch_on_alert", "scan_and_reimage", "mixed")
 
 
 def train(episodes: int, run_dir: Path, algo: str = "qlearn",
           resume: Path | None = None, seed: int = 0,
           scenario: str | int | None = None,
           player_id: str | None = None,
+          curriculum: bool = False, promote_threshold: float = 0.6,
           eps_start=1.0, eps_end=0.05, eps_decay_episodes=0.6,
           quiet: bool = False):
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -51,10 +53,24 @@ def train(episodes: int, run_dir: Path, algo: str = "qlearn",
     rng = np.random.default_rng(seed)
     eps_decay = eps_decay_episodes * episodes
     recent: list[float] = []
+    tier_idx = 0
     t0 = time.time()
     with open(run_dir / "metrics.jsonl", "a", encoding="utf-8") as log:
         for ep in range(episodes):
-            if ep < episodes * 0.15:  # warmup: learn mechanics before opponents
+            if curriculum:
+                if (ep > 0 and ep % 50 == 0 and recent
+                        and sum(recent) / len(recent) >= promote_threshold
+                        and tier_idx < len(CURRICULUM_TIERS) - 1):
+                    tier_idx += 1
+                    if not quiet:
+                        print(f"ep {ep}: promoted to "
+                              f"{CURRICULUM_TIERS[tier_idx]}")
+                cur = CURRICULUM_TIERS[tier_idx]
+                defender = make_defender(
+                    DEFENDER_POPULATION[rng.integers(len(DEFENDER_POPULATION))]
+                    if cur == "mixed" else cur,
+                    difficulty=scen["difficulty"])
+            elif ep < episodes * 0.15:  # warmup: learn mechanics before opponents
                 defender = make_defender("noop")
             else:
                 defender = make_defender(
@@ -92,6 +108,8 @@ def train(episodes: int, run_dir: Path, algo: str = "qlearn",
             rec = {"ep": ep, "defender": defender.name, "reward": round(total, 2),
                    "won": won, "win_rate_100": round(win_rate, 3),
                    "eps": round(eps, 3)}
+            if curriculum:
+                rec["tier"] = CURRICULUM_TIERS[tier_idx]
             if algo == "dqn":
                 rec["loss"] = round(agent.last_loss, 4)
             log.write(json.dumps(rec) + "\n")
@@ -119,10 +137,15 @@ def main():
                         "or omit for a fresh map each episode")
     p.add_argument("--player-id", default=None,
                    help="checkpoint to policies/<scenario>/<id>.pkl")
+    p.add_argument("--curriculum", action="store_true",
+                   help="promote defender tiers as win-rate crosses "
+                        "--promote-threshold")
+    p.add_argument("--promote-threshold", type=float, default=0.6)
     args = p.parse_args()
     out = train(args.episodes, Path("runs") / args.run, algo=args.algo,
                 resume=args.resume, seed=args.seed, scenario=args.scenario,
-                player_id=args.player_id)
+                player_id=args.player_id, curriculum=args.curriculum,
+                promote_threshold=args.promote_threshold)
     print(json.dumps(out))
 
 

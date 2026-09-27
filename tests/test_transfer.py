@@ -1,8 +1,11 @@
 """Transfer eval protocol: held-out seeds, one policy across fresh maps."""
 
+import json
+
 from artai.agent.qlearn import QLearner
 from artai.env.redteam_env import RedTeamEnv
 from artai.eval import eval_transfer, qlearn_policy, random_baseline
+from artai.train import train
 
 HELD_OUT = [201, 202, 203, 204]
 
@@ -46,3 +49,18 @@ def test_shared_table_trains_across_maps():
     res = eval_transfer(qlearn_policy(agent), HELD_OUT)
     assert agent.table  # it learned something, somewhere
     assert res["seeds"] == len(HELD_OUT)
+
+
+def test_curriculum_promotes_and_logs(tmp_path):
+    """Curriculum run: tiers stamp into metrics; a trivially-winnable
+    opening tier must promote at least once."""
+    run_dir = tmp_path / "cur"
+    train(120, run_dir, scenario="training_ground", curriculum=True,
+          promote_threshold=0.4, quiet=True)
+    tiers = set()
+    for line in (run_dir / "metrics.jsonl").read_text().splitlines():
+        rec = json.loads(line)
+        assert "tier" in rec
+        tiers.add(rec["tier"])
+    assert "noop" in tiers
+    assert len(tiers) >= 2, f"never promoted: {tiers}"
