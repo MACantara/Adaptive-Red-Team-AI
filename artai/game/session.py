@@ -6,7 +6,12 @@ gets one action based on alerts alone. The defender never sees ownership,
 only noise. That asymmetry is the game.
 """
 
+from artai.env import catalog
 from artai.env.redteam_env import ACTIONS, decode
+
+ATTACKER_BURST = 4  # attacker steps per defender turn
+
+_TECHNIQUES = catalog.load()
 
 ATTACKER_BURST = 4  # attacker steps per defender turn
 
@@ -38,6 +43,7 @@ def run_session(attacker, env, defender_policy, eps=0.05, max_turns=40,
                     break
                 a = attacker.act(key, info["action_mask"], eps)
                 a_type, node_id, arg = decode(a, env.max_nodes)
+                n_tech = len(env.technique_log)
                 obs, r, term, trunc, info = env.step(a)
                 key2 = env.state_key()
                 if train_lr is not None and hasattr(attacker, "update"):
@@ -48,6 +54,8 @@ def run_session(attacker, env, defender_policy, eps=0.05, max_turns=40,
                 log.append({
                     "turn": turn, "actor": "attacker",
                     "action": ACTIONS[a_type], "node": node_id, "arg": arg,
+                    "tech": (env.technique_log[-1]
+                             if len(env.technique_log) > n_tech else None),
                     "reward": round(r, 2),
                     "detected": bool(env.detected_last),
                 })
@@ -56,9 +64,9 @@ def run_session(attacker, env, defender_policy, eps=0.05, max_turns=40,
 
             view = env.defender_view()
             d_action, d_node = defender_policy(view)
-            env.apply_defender_action(d_action, d_node)
+            effected = env.apply_defender_action(d_action, d_node)
             log.append({"turn": turn, "actor": "defender", "action": d_action,
-                        "node": d_node})
+                        "node": d_node, "effected": effected})
             # a defender turn can end the game (burned every foothold)
             if env._had_owned and not any(
                     n.owned for n in env.net.nodes.values()):
@@ -74,6 +82,16 @@ def debrief(env, log, turns: int, difficulty=None) -> dict:
     attempted = env.technique_log
     detected = env.detection_log
     owned = sum(n.owned for n in env.net.nodes.values())
+    first_seen: dict[str, int] = {}
+    for e in log:
+        tech = e.get("tech")
+        if tech in _TECHNIQUES:
+            first_seen.setdefault(_TECHNIQUES[tech].tactic, e["turn"])
+    kill_chain = [{"tactic": t, "turn": tn}
+                  for t, tn in sorted(first_seen.items(),
+                                      key=lambda kv: kv[1])]
+    d_acts = [e for e in log if e["actor"] == "defender"]
+    real = [e for e in d_acts if e["action"] != "pass"]
     return {
         "result": "attacker_win" if env.won else "defender_hold",
         "turns": turns,
@@ -83,6 +101,12 @@ def debrief(env, log, turns: int, difficulty=None) -> dict:
         "techniques_undetected": [t for t in attempted if t not in detected],
         "alerts_raised": sum(1 for e in log if e.get("detected")),
         "difficulty": difficulty,
-        "defender_actions": [e for e in log if e["actor"] == "defender"],
+        "kill_chain": kill_chain,
+        "defender_efficiency": {
+            "useful": sum(1 for e in real if e.get("effected")),
+            "wasted": sum(1 for e in real if e.get("effected") is False),
+            "passes": len(d_acts) - len(real),
+        },
+        "defender_actions": d_acts,
         "log": log,
     }

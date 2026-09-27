@@ -39,6 +39,23 @@ def test_debrief_technique_fields():
         assert t.startswith("T")
 
 
+def test_debrief_v2_kill_chain_and_efficiency():
+    env = _env()
+    agent = QLearner(env.action_space.n, seed=0)
+    report = run_session(
+        agent, env,
+        from_lines(["patch 1", "investigate 1", "pass"] * 20),
+        eps=1.0, difficulty=2)
+    kc = report["kill_chain"]
+    assert kc and all("tactic" in e and "turn" in e for e in kc)
+    turns = [e["turn"] for e in kc]
+    assert turns == sorted(turns)  # monotone — it's a timeline
+    eff = report["defender_efficiency"]
+    assert eff["useful"] + eff["wasted"] + eff["passes"] == len(
+        report["defender_actions"])
+    assert report["difficulty"] == 2
+
+
 def test_resolve_specs():
     assert callable(resolve("random"))
     assert callable(resolve("script", ["pass"]))

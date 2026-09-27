@@ -308,13 +308,17 @@ class RedTeamEnv(gym.Env):
         see — alerts, never ground-truth ownership."""
         return self._defender_view()
 
-    def apply_defender_action(self, action: str, node_id: int | None):
-        """Game-layer defender turn. Validate then delegate."""
+    def apply_defender_action(self, action: str, node_id: int | None) -> bool:
+        """Game-layer defender turn. Validate then delegate.
+
+        Returns whether the action effected something real — a patch on a
+        box with no vulns is wasted motion, and the debrief tracks that.
+        """
         if action not in DEF_ACTIONS:
             raise ValueError(f"unknown defender action {action!r}")
         if action != "pass" and node_id not in self.net.nodes:
             raise ValueError(f"no such node {node_id!r}")
-        self._apply_defender(action, node_id)
+        return self._apply_defender(action, node_id)
 
     def _defender_view(self) -> dict:
         return {
@@ -329,18 +333,21 @@ class RedTeamEnv(gym.Env):
             },
         }
 
-    def _apply_defender(self, action: str | None, node_id: int | None):
+    def _apply_defender(self, action: str | None, node_id: int | None) -> bool:
         idx = DEF_ACTIONS.index(action) if action in DEF_ACTIONS else 0
         self.last_def_action = idx
         self.def_hist[idx] += 1
         if node_id is None or node_id not in self.net.nodes:
-            return
+            return True  # pass, or a no-op the debrief doesn't score
         node = self.net.nodes[node_id]
         if node.tier == 0 and action in ("isolate", "patch"):
-            return  # the edge is the internet — evictable, not hardenable
+            return False  # the edge is the internet — evictable, not hardenable
         if action == "isolate":
+            was = not node.isolated
             node.isolated = True
+            return was
         elif action == "reimage":
+            hit = node.owned or node.alert > 0
             node.alert = 0.0
             node.alert_total = 0.0
             node.vulns_known = node.creds_known = False
@@ -350,12 +357,19 @@ class RedTeamEnv(gym.Env):
             else:
                 node.owned = node.root = node.persistent = False
                 self.creds = [c for c in self.creds if c != node_id]
+            return hit
         elif action == "patch":
+            had = bool(node.vulns or node.local_vulns)
             node.vulns = []
             node.local_vulns = []
+            return had
         elif action == "decoy":
+            was = not node.decoy
             node.decoy = True  # perimeter decoys are legit — allowed on tier 0
-        # investigate: reveals truth to a human defender; no env effect
+            return was
+        elif action == "investigate":
+            return node.alert > 0  # found real noise vs a quiet box
+        return True
 
     # ---------- observation ----------
 
