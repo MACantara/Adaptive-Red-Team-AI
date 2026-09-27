@@ -387,7 +387,22 @@ class RedTeamEnv(gym.Env):
             self.last_def_action,
             int(self.detected_last),
             sum(n.alert > 0 for n in self.net.nodes.values()),
+            self.defender_signature(),
         )
+
+    def defender_signature(self) -> tuple:
+        """Coarse (dominant non-pass action, activity level) from def_hist.
+
+        Deliberately small — raw counts would blow up the state space;
+        what the policy needs is 'reimager, busy' vs 'patcher, occasional'.
+        """
+        total = self.def_hist.sum()
+        active = self.def_hist[1:].sum()
+        if not total or not active:
+            return (0, 0)
+        dominant = 1 + int(self.def_hist[1:].argmax())
+        rate = active / total
+        return (dominant, 0 if rate < 0.15 else 1 if rate < 0.45 else 2)
 
     def _obs(self) -> np.ndarray:
         n = self.max_nodes
