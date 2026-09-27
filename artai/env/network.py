@@ -33,7 +33,8 @@ class Node:
     decoy: bool = False
     vulns_known: bool = False
     creds_known: bool = False
-    alert: float = 0.0
+    alert: float = 0.0  # recent noise — decays each step
+    alert_total: float = 0.0  # lifetime noise — never decays
 
     def snapshot(self) -> tuple:
         return (
@@ -70,9 +71,10 @@ class Network:
         return out
 
 
-_REMOTE_TECHNIQUES = ("T1190", "T1021", "T1357", "T1210")
+# exploit-action techniques only — a vuln entry whose catalog action isn't
+# "exploit" is a dead slot its owner can never be taken through
+_REMOTE_TECHNIQUES = ("T1190", "T1357", "T1210")
 _LOCAL_TECHNIQUES = ("T1068", "T1078")
-_CRED_TECHNIQUES = ("T1003",)
 _SERVICES = ("http", "smb", "rdp", "ssh", "winrm", "mssql")
 _TIER_NAMES = ("edge", "ws", "srv", "dc", "cj")
 _TIER_VALUES = (2, 1, 2, 5, 10)
@@ -114,6 +116,14 @@ def generate(seed: int, n_workstations: int = 3, n_servers: int = 3) -> Network:
     for s in srv:
         link(s, dc)
     link(dc, cj)
+    # redundant routes to the crown jewel — one burned node must not be
+    # checkmate, or defender patch/reimage decides the game by seed alone
+    for s in rng.sample(srv, min(2, len(srv))):
+        link(s, cj)
+    for i in range(len(srv)):
+        for j in range(i + 1, len(srv)):
+            if rng.random() < 0.4:
+                link(srv[i], srv[j])
     # a few cross links among workstations for path diversity
     for i in range(len(ws)):
         for j in range(i + 1, len(ws)):
@@ -129,8 +139,6 @@ def generate(seed: int, n_workstations: int = 3, n_servers: int = 3) -> Network:
                 )
         if rng.random() < 0.7:
             node.local_vulns.append(Vuln(technique_id=rng.choice(_LOCAL_TECHNIQUES), remote=False))
-        if rng.random() < 0.5:
-            node.vulns.append(Vuln(technique_id=rng.choice(_CRED_TECHNIQUES)))
 
         if node.tier in (2, 3):
             candidates = [n for n in nodes if nodes[n].tier > node.tier - 1 and n != nid]
@@ -142,11 +150,15 @@ def generate(seed: int, n_workstations: int = 3, n_servers: int = 3) -> Network:
 
     # guarantee a viable path of vulns for the heuristic baseline
     nodes[entry].vulns.append(Vuln(technique_id="T1190"))
-    if not any(dc in n.credentials for n in nodes.values()):
-        nodes[srv[0]].credentials.append(dc)
+    # at least two distinct credential holders unlock each deep node —
+    # losing one to a patch/reimage leaves an alternate route
+    for h in rng.sample(srv, min(2, len(srv))):
+        if dc not in nodes[h].credentials:
+            nodes[h].credentials.append(dc)
+    for h in {dc, srv[-1]}:
+        if cj not in nodes[h].credentials:
+            nodes[h].credentials.append(cj)
     nodes[dc].local_vulns.append(Vuln(technique_id="T1068", remote=False))
-    if not any(cj in n.credentials for n in nodes.values()):
-        nodes[dc].credentials.append(cj)
     if not nodes[cj].local_vulns:
         nodes[cj].local_vulns.append(Vuln(technique_id="T1068", remote=False))
 
