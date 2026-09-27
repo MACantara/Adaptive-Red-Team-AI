@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 from artai.agent.qlearn import QLearner
+from artai.env.catalog import load_scenario
 from artai.env.defender import DEF_NAMES
 from artai.env.redteam_env import RedTeamEnv
 from artai.game import defenders as gdef
@@ -23,7 +24,8 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--defender", default="random",
                    choices=["human", "script", *DEF_NAMES])
-    p.add_argument("--scenario", type=int, default=9)
+    p.add_argument("--scenario", default="training_ground",
+                   help="scenario name, a map seed, or 'none'")
     p.add_argument("--policy", type=Path, default=Path("policy.pkl"))
     p.add_argument("--script", type=Path, default=None,
                    help="defender script file, one 'action node' per line")
@@ -34,7 +36,10 @@ def main():
                    help="write the post-game report JSON here")
     args = p.parse_args()
 
-    env = RedTeamEnv(scenario_seed=args.scenario)
+    scen = load_scenario(None if args.scenario == "none" else args.scenario)
+    env = RedTeamEnv(scenario_seed=scen["seed"],
+                     n_workstations=scen["n_workstations"],
+                     n_servers=scen["n_servers"])
     agent = QLearner(env.action_space.n, seed=0)
     if args.policy.exists():
         agent.load(args.policy)

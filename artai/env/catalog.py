@@ -59,3 +59,24 @@ def load(path: Path | None = None) -> dict[str, Technique]:
     if not isinstance(raw, dict):
         raise ValueError("catalog must be a mapping of technique id -> entry")
     return {tid: validate(tid, entry) for tid, entry in raw.items()}
+
+
+_SCENARIOS = Path(__file__).resolve().parent.parent / "kb" / "scenarios.yaml"
+
+
+def load_scenario(spec: str | int | None, path: Path | None = None) -> dict:
+    """Resolve a scenario: name from kb/scenarios.yaml, int seed, or None."""
+    if spec is None:
+        return {"seed": None, "n_workstations": 3, "n_servers": 3}
+    if isinstance(spec, int) or (isinstance(spec, str) and spec.isdigit()):
+        return {"seed": int(spec), "n_workstations": 3, "n_servers": 3}
+    raw = yaml.safe_load((path or _SCENARIOS).read_text(encoding="utf-8"))
+    if spec not in raw:
+        raise ValueError(
+            f"unknown scenario {spec!r} — have {sorted(raw)}")
+    entry = dict(raw[spec])
+    return {
+        "seed": entry.get("seed"),
+        "n_workstations": int(entry.get("n_workstations", 3)),
+        "n_servers": int(entry.get("n_servers", 3)),
+    }

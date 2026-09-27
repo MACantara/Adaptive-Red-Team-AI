@@ -1,6 +1,6 @@
 import pytest
 
-from artai.env.catalog import load, validate
+from artai.env.catalog import load, load_scenario, validate
 
 
 def test_default_catalog_loads():
@@ -35,3 +35,14 @@ def test_rejects_out_of_range_detectability():
             "name": "x", "tactic": "y", "action": "scan",
             "detectability": 1.5, "cost": 1, "success": 1.0,
         })
+
+
+def test_scenario_loader():
+    s = load_scenario("training_ground")
+    assert s["seed"] == 9
+    s = load_scenario("9")
+    assert s["seed"] == 9
+    s = load_scenario(None)
+    assert s["seed"] is None
+    with pytest.raises(ValueError, match="unknown scenario"):
+        load_scenario("nowhere")
