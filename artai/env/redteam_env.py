@@ -48,6 +48,11 @@ class RedTeamEnv(gym.Env):
         # pinned topology for scenario-pack training; None = fresh map each reset
         self.scenario_seed = scenario_seed
         self.catalog = catalog or load_catalog()
+        # same-action technique variants, indexed by arg — the hot path for
+        # _technique_for (no catalog rescan per candidate)
+        self._by_action: dict[str, list] = {}
+        for t in self.catalog.values():
+            self._by_action.setdefault(t.action, []).append(t)
         self.max_nodes = 3 + n_workstations + n_servers  # edge + dc + cj + tiers
         self.rng = np.random.default_rng()
         self.net: net_mod.Network | None = None
@@ -68,6 +73,7 @@ class RedTeamEnv(gym.Env):
         self._got_cred = False
         self._got_root = False
         self._last_success = False
+        self.won = False
         self.technique_log: list[str] = []
         self.detection_log: list[str] = []
 
@@ -93,11 +99,19 @@ class RedTeamEnv(gym.Env):
         self.detected_last = 0.0
         self._had_owned = self._got_cred = self._got_root = False
         self._last_success = False
+        self.won = False
         self.technique_log, self.detection_log = [], []
         return self._obs(), {"action_mask": self.action_mask()}
 
     def step(self, action: int):
-        assert self.net is not None
+        if self.net is None:
+            raise RuntimeError("call reset() before step()")
+        # out-of-space actions can't decode — negative indices used to wrap
+        # onto crown-jewel collect; penalize instead of executing
+        if not self.action_space.contains(action):
+            return (self._obs(), -0.6, False, False,
+                    {"action_mask": self.action_mask(), "techniques": [],
+                     "detected": []})
         a_type, node_id, arg = decode(int(action), self.max_nodes)
         name = ACTIONS[a_type]
         node = self.net.nodes[node_id]
@@ -108,19 +122,17 @@ class RedTeamEnv(gym.Env):
         self.step_count += 1
 
         tech = self._technique_for(name, node, arg)
-        if tech is None or not self._useful(name, node, arg) or not all(
-            self._has_req(r, node, arg) for r in tech.requires
-        ):
-            reward -= 0.5
-        else:
+        if self._legal(tech, name, node, arg):
             success = self.rng.random() < tech.success
             reward += self._apply(name, node, arg, tech, success)
             self._detection_roll(tech, node)
             reward += self._det_reward
+        else:
+            reward -= 0.5
 
+        for n in self.net.nodes.values():
+            n.alert = max(0.0, n.alert - 0.4)  # alerts age out over time
         if self.defender is not None:
-            for n in self.net.nodes.values():
-                n.alert = max(0.0, n.alert - 0.4)  # alerts age out
             d_name, d_node = self.defender.act(self._defender_view(), self.rng)
             self._apply_defender(d_name, d_node)
 
@@ -131,6 +143,7 @@ class RedTeamEnv(gym.Env):
         ):
             reward += WIN_REWARD
             terminated = True
+            self.won = True
         elif self._had_owned and not any(
             n.owned for n in self.net.nodes.values()
         ):
@@ -140,7 +153,7 @@ class RedTeamEnv(gym.Env):
             truncated = True
 
         mask = self.action_mask()
-        if not terminated and mask.sum() == 0:
+        if not (terminated or truncated) and mask.sum() == 0:
             terminated = True  # attacker out of moves — contained
             reward += CONTAINED_PENALTY
 
@@ -180,6 +193,8 @@ class RedTeamEnv(gym.Env):
             return not node.isolated
         if req == "crown_jewel":
             return node.id == self.net.crown_jewel
+        if req == "creds_known":
+            return node.creds_known
         return False
 
     def _useful(self, name: str, node, arg: int) -> bool:
@@ -201,6 +216,9 @@ class RedTeamEnv(gym.Env):
         return True
 
     def _technique_for(self, name: str, node, arg: int):
+        """Technique an action would execute. arg indexes vuln lists for
+        exploit/privesc, and same-action catalog variants elsewhere
+        (e.g. arg=1 picks the quieter T1550 lateral over T1021)."""
         if name == "exploit":
             if not (node.vulns_known and arg < len(node.vulns)):
                 return None
@@ -212,28 +230,22 @@ class RedTeamEnv(gym.Env):
                 return None
             t = self.catalog.get(node.local_vulns[arg].technique_id)
             return t if t is not None and t.action == "privesc" else None
-        if name == "lateral":
-            for t in self.catalog.values():
-                if t.action == "lateral" and node.id in self.creds:
-                    return t
-            return None
-        for t in self.catalog.values():
-            if t.action == name:
-                return t
-        return None
+        variants = self._by_action.get(name, ())
+        return variants[arg] if arg < len(variants) else None
 
-    def _valid(self, a_type: int, node_id: int, arg: int) -> bool:
-        node = self.net.nodes[node_id]
-        name = ACTIONS[a_type]
-        # arg only indexes vuln lists; arg-free actions live at arg==0
-        if name not in ("exploit", "privesc") and arg > 0:
-            return False
-        tech = self._technique_for(name, node, arg)
+    def _legal(self, tech, name: str, node, arg: int) -> bool:
+        """The one legality predicate — shared by action_mask() and step()."""
         return (
             tech is not None
             and self._useful(name, node, arg)
             and all(self._has_req(r, node, arg) for r in tech.requires)
         )
+
+    def _valid(self, a_type: int, node_id: int, arg: int) -> bool:
+        node = self.net.nodes[node_id]
+        name = ACTIONS[a_type]
+        return self._legal(
+            self._technique_for(name, node, arg), name, node, arg)
 
     def action_mask(self) -> np.ndarray:
         mask = np.zeros(self.action_space.n, dtype=np.int8)
@@ -300,13 +312,21 @@ class RedTeamEnv(gym.Env):
         """Game-layer defender turn. Validate then delegate."""
         if action not in DEF_ACTIONS:
             raise ValueError(f"unknown defender action {action!r}")
+        if action != "pass" and node_id not in self.net.nodes:
+            raise ValueError(f"no such node {node_id!r}")
         self._apply_defender(action, node_id)
 
     def _defender_view(self) -> dict:
         return {
             "alerts": {n.id: n.alert for n in self.net.nodes.values() if n.alert > 0},
             "alert_totals": {n.id: n.alert_total for n in self.net.nodes.values() if n.alert_total > 0},
-            "nodes": self.net.nodes,
+            "nodes": {
+                n.id: net_mod.NodeView(
+                    tier=n.tier, alert=n.alert, alert_total=n.alert_total,
+                    vuln_count=len(n.vulns), isolated=n.isolated,
+                    decoy=n.decoy)
+                for n in self.net.nodes.values()
+            },
         }
 
     def _apply_defender(self, action: str | None, node_id: int | None):
@@ -324,6 +344,7 @@ class RedTeamEnv(gym.Env):
             node.alert = 0.0
             node.alert_total = 0.0
             node.vulns_known = node.creds_known = False
+            node.decoy = False  # fresh image — honeypot gone too
             if node.persistent:
                 node.root = False
             else:
@@ -333,7 +354,7 @@ class RedTeamEnv(gym.Env):
             node.vulns = []
             node.local_vulns = []
         elif action == "decoy":
-            node.decoy = True
+            node.decoy = True  # perimeter decoys are legit — allowed on tier 0
         # investigate: reveals truth to a human defender; no env effect
 
     # ---------- observation ----------

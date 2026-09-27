@@ -44,7 +44,7 @@ class PatchOnAlertDefender:
         if not alerts:
             return "pass", None
         target = max(alerts, key=alerts.get)
-        if view["nodes"][target].vulns:
+        if view["nodes"][target].vuln_count:
             return "patch", target
         return "isolate", target
 

@@ -39,6 +39,8 @@ def train(episodes: int, run_dir: Path, algo: str = "qlearn",
         agent = DQNAgent(env.observation_space.shape[0],
                          env.action_space.n, seed=seed)
         ckpt_path = resume or run_dir / "policy.pt"
+    if resume is not None and not resume.exists():
+        print(f"warning: --resume {resume} not found; training fresh")
     if resume and resume.exists():
         agent.load(resume)
 
@@ -55,7 +57,7 @@ def train(episodes: int, run_dir: Path, algo: str = "qlearn",
                     DEFENDER_POPULATION[rng.integers(len(DEFENDER_POPULATION))]
                 )
             env.defender = defender
-            obs, info = env.reset()
+            obs, info = env.reset(seed=seed + ep)  # reproducible runs
             eps = max(eps_end, eps_start - (eps_start - eps_end) * ep / max(eps_decay, 1))
             key = env.state_key()
 

@@ -46,6 +46,18 @@ class Node:
         )
 
 
+@dataclass(frozen=True)
+class NodeView:
+    """What a defender may legitimately see of a host — never ownership,
+    credentials, or persistence state. The alert view, not ground truth."""
+    tier: int
+    alert: float
+    alert_total: float
+    vuln_count: int
+    isolated: bool
+    decoy: bool
+
+
 @dataclass
 class Network:
     nodes: dict[int, Node]
@@ -63,13 +75,6 @@ class Network:
             ),
         )
 
-    def reachable(self, node_id: int) -> set[int]:
-        out = set()
-        for n in self.links.get(node_id, ()):
-            if not self.nodes[n].isolated:
-                out.add(n)
-        return out
-
 
 # exploit-action techniques only — a vuln entry whose catalog action isn't
 # "exploit" is a dead slot its owner can never be taken through
@@ -82,6 +87,8 @@ _TIER_VALUES = (2, 1, 2, 5, 10)
 
 def generate(seed: int, n_workstations: int = 3, n_servers: int = 3) -> Network:
     """Deterministic layered topology: edge -> ws -> srv -> dc -> cj."""
+    if n_workstations < 1 or n_servers < 1:
+        raise ValueError("scenario needs at least one workstation and one server")
     rng = random.Random(seed)
     nodes: dict[int, Node] = {}
     links: dict[int, set[int]] = {}

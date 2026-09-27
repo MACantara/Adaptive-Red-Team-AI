@@ -55,6 +55,8 @@ class QLearner:
     def update(self, key, a: int, r: float, key2, done: bool, mask2: np.ndarray):
         self.replay.append((key, a, r, key2, done, mask2))
         self._bellman(key, a, r, key2, done, mask2)
+        # sample may redraw the just-added transition — a free double update,
+        # not a bug
         for t in self.rng.sample(
                 self.replay, min(self.replay_k, len(self.replay))):
             self._bellman(*t)

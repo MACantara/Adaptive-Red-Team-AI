@@ -11,6 +11,7 @@ KNOWN_ACTIONS = {
 KNOWN_REQUIRES = {
     "discovered", "reachable", "credential", "user_access", "root",
     "remote_vuln", "local_vuln", "not_isolated", "crown_jewel",
+    "creds_known",
 }
 
 _DEFAULT = Path(__file__).resolve().parent.parent / "kb" / "techniques.yaml"

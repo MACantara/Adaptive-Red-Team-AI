@@ -42,8 +42,12 @@ def main():
                      n_servers=scen["n_servers"])
     agent = QLearner(env.action_space.n, seed=0)
     if args.policy.exists():
+        # checkpoints are trusted artifacts — pickle load, don't point at
+        # files you didn't produce
         agent.load(args.policy)
         print(f"loaded {args.policy} ({len(agent.table)} states)")
+    else:
+        print(f"no checkpoint at {args.policy} — playing untrained policy")
 
     script_lines = (args.script.read_text().splitlines()
                     if args.script else None)

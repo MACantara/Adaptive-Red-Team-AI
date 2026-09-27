@@ -2,7 +2,7 @@
 # attack action requires, costs, and how loud it is.
 # Fields: name, tactic, action, requires[], detectability(0-1), cost, success(0-1)
 # requires draws from: discovered, reachable, credential, user_access, root,
-# remote_vuln, local_vuln, not_isolated, crown_jewel
+# remote_vuln, local_vuln, not_isolated, crown_jewel, creds_known
 
 T1046:
   name: Network Service Discovery
@@ -80,7 +80,7 @@ T1003:
   name: OS Credential Dumping
   tactic: Credential Access
   action: dump_creds
-  requires: [user_access, not_isolated]
+  requires: [user_access, creds_known, not_isolated]
   detectability: 0.6
   cost: 2
   success: 0.9

@@ -32,4 +32,4 @@ def test_topology_shape():
 def test_guaranteed_dc_and_cj_access():
     net = generate(seed=7)
     assert any(net.crown_jewel in n.credentials for n in net.nodes.values())
-    assert any(net.entry_point in net.links[n] or n == net.entry_point for n in net.nodes)
+    assert net.links[net.entry_point]  # entry must link somewhere

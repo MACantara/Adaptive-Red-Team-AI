@@ -9,7 +9,7 @@ import numpy as np
 from artai.env.redteam_env import ACTIONS, decode
 
 _PRIORITY = (
-    "collect", "privesc", "dump_creds", "lateral",
+    "collect", "privesc", "persist", "dump_creds", "lateral",
     "exploit", "enumerate", "scan",
 )
 

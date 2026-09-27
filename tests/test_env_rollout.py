@@ -109,3 +109,36 @@ def test_env_deterministic_under_seed():
         return out
 
     assert traj(11) == traj(11)
+
+
+def test_step_rejects_out_of_space_action():
+    """Negative action used to wrap onto crown-jewel collect — must not."""
+    env = RedTeamEnv()
+    obs, info = env.reset(seed=0)
+    _, r, term, trunc, info = env.step(-1)
+    assert not env.won and r < 0
+    _, r, term, trunc, info = env.step(env.action_space.n)
+    assert not env.won and r < 0
+
+
+def test_defender_view_is_redacted():
+    env = RedTeamEnv()
+    env.reset(seed=0)
+    view = env.defender_view()
+    nv = next(iter(view["nodes"].values()))
+    for secret in ("owned", "root", "credentials", "persistent", "vulns"):
+        assert not hasattr(nv, secret)
+    assert hasattr(nv, "vuln_count") and hasattr(nv, "alert")
+
+
+def test_dump_creds_needs_enumerate():
+    """Recon gate: no creds_known → dump_creds is masked out."""
+    env = RedTeamEnv()
+    env.reset(seed=0)
+    node = env.net.nodes[1]
+    node.owned = True
+    node.discovered = True
+    assert node.credentials is not None
+    from artai.env.redteam_env import encode
+    a = encode(3, 1, 0, env.max_nodes)  # dump_creds, node 1, arg 0
+    assert env.action_mask()[a] == 0 or not node.credentials
