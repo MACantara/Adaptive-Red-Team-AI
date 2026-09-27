@@ -291,6 +291,17 @@ class RedTeamEnv(gym.Env):
 
     # ---------- defender ----------
 
+    def defender_view(self) -> dict:
+        """Public view for the game layer: what a defender may legitimately
+        see — alerts, never ground-truth ownership."""
+        return self._defender_view()
+
+    def apply_defender_action(self, action: str, node_id: int | None):
+        """Game-layer defender turn. Validate then delegate."""
+        if action not in DEF_ACTIONS:
+            raise ValueError(f"unknown defender action {action!r}")
+        self._apply_defender(action, node_id)
+
     def _defender_view(self) -> dict:
         return {
             "alerts": {n.id: n.alert for n in self.net.nodes.values() if n.alert > 0},
