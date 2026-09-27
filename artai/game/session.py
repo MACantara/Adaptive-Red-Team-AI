@@ -17,16 +17,23 @@ ATTACKER_BURST = 4  # attacker steps per defender turn
 
 
 def run_session(attacker, env, defender_policy, eps=0.05, max_turns=40,
-                train_lr=None, difficulty=None):
-    """Play one game. defender_policy: callable(view, state) -> (action, node).
+                train_lr=None, difficulty=None, seed=None, on_event=None):
+    """Play one game. defender_policy: callable(view) -> (action, node).
 
     attacker: object with act(key, mask, eps); if it also has update() and
     train_lr is set, the attacker fine-tunes on this defender mid-game —
     the 'learns from your moves' hook.
-    Returns the debrief dict.
+    on_event(entry) fires after every log append — the TUI/replay layer's
+    live feed. Returns the debrief dict.
     """
     log = []
-    obs, info = env.reset()
+
+    def emit(entry):
+        log.append(entry)
+        if on_event:
+            on_event(entry)
+
+    obs, info = env.reset(seed=seed)
     key = env.state_key()
     prev_defender = env.defender
     env.defender = None  # game layer owns defender timing
@@ -51,13 +58,14 @@ def run_session(attacker, env, defender_policy, eps=0.05, max_turns=40,
                                     info["action_mask"])
                 key = key2
                 done = term or trunc
-                log.append({
+                emit({
                     "turn": turn, "actor": "attacker",
                     "action": ACTIONS[a_type], "node": node_id, "arg": arg,
                     "tech": (env.technique_log[-1]
                              if len(env.technique_log) > n_tech else None),
                     "reward": round(r, 2),
                     "detected": bool(env.detected_last),
+                    "map": list(env.state_key()[0]),
                 })
             if done:
                 break
@@ -65,8 +73,9 @@ def run_session(attacker, env, defender_policy, eps=0.05, max_turns=40,
             view = env.defender_view()
             d_action, d_node = defender_policy(view)
             effected = env.apply_defender_action(d_action, d_node)
-            log.append({"turn": turn, "actor": "defender", "action": d_action,
-                        "node": d_node, "effected": effected})
+            emit({"turn": turn, "actor": "defender", "action": d_action,
+                  "node": d_node, "effected": effected,
+                  "map": list(env.state_key()[0])})
             # a defender turn can end the game (burned every foothold)
             if env._had_owned and not any(
                     n.owned for n in env.net.nodes.values()):
@@ -74,7 +83,9 @@ def run_session(attacker, env, defender_policy, eps=0.05, max_turns=40,
     finally:
         env.defender = prev_defender
 
-    return debrief(env, log, turn, difficulty)
+    report = debrief(env, log, turn, difficulty)
+    report["seed"] = seed
+    return report
 
 
 def debrief(env, log, turns: int, difficulty=None) -> dict:

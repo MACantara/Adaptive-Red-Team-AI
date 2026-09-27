@@ -42,7 +42,17 @@ def main():
                    help="fine-tune the policy on this defender mid-game")
     p.add_argument("--debrief", type=Path, default=None,
                    help="write the post-game report JSON here")
+    p.add_argument("--ui", choices=("cli", "textual"), default="cli")
+    p.add_argument("--replay", type=Path, default=None,
+                   help="scrub a saved debrief JSON instead of playing")
+    p.add_argument("--speed", type=float, default=0.15,
+                   help="seconds per event in spectate mode")
     args = p.parse_args()
+
+    if args.replay is not None:
+        from artai.game.tui import ReplayApp
+        ReplayApp(args.replay).run()
+        return 0
 
     scen = load_scenario(None if args.scenario == "none" else args.scenario)
     env = RedTeamEnv(scenario_seed=scen["seed"],
@@ -64,12 +74,22 @@ def main():
                     if args.script else None)
     defender_name = args.defender or scen.get("defender") or "random"
     difficulty = args.difficulty or scen["difficulty"]
-    defender = gdef.resolve(defender_name, script_lines,
-                            difficulty=difficulty)
 
-    report = run_session(agent, env, defender, eps=args.eps,
-                         train_lr=0.1 if args.learn else None,
-                         difficulty=difficulty)
+    if args.ui == "textual":
+        from artai.game.tui import RedTeamApp
+        app = RedTeamApp(agent, env, defender_name, script_lines=script_lines,
+                         difficulty=difficulty, spectate=defender_name != "human",
+                         eps=args.eps, learn=args.learn, speed=args.speed)
+        app.run()
+        report = getattr(app, "_report", None)
+        if report is None:
+            return 1
+    else:
+        defender = gdef.resolve(defender_name, script_lines,
+                                difficulty=difficulty)
+        report = run_session(agent, env, defender, eps=args.eps,
+                             train_lr=0.1 if args.learn else None,
+                             difficulty=difficulty)
 
     print(f"\nresult: {report['result']} in {report['turns']} turns "
           f"(defender {defender_name}, tier {difficulty})")

@@ -12,6 +12,7 @@ dependencies = [
     "numpy>=1.26",
     "torch>=2.2",
     "pyyaml>=6.0",
+    "textual>=3.0",
 ]
 
 [project.optional-dependencies]
@@ -25,3 +26,5 @@ artai = ["kb/**/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

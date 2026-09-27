@@ -38,6 +38,21 @@ def from_lines(lines):
     return lambda view: next(it, ("pass", None))
 
 
+def parse_line(text: str):
+    """'patch 4' -> ('patch', 4); 'pass' -> ('pass', None). Raises
+    ValueError on malformed input — callers re-prompt."""
+    parts = text.strip().split()
+    if not parts or parts[0] == "pass":
+        return "pass", None
+    if parts[0] not in DEF_ACTIONS:
+        raise ValueError(f"unknown action {parts[0]!r}")
+    try:
+        node = int(parts[1]) if len(parts) > 1 else None
+    except ValueError:
+        raise ValueError(f"bad node {parts[1]!r}") from None
+    return parts[0], node
+
+
 def human(out=print, inp=input):
     """Interactive CLI defender. Sees alerts, never ground truth."""
     def policy(view):
@@ -49,20 +64,12 @@ def human(out=print, inp=input):
         out("actions: " + " ".join(DEF_ACTIONS) + "  (e.g. 'patch 4')")
         while True:
             try:
-                parts = inp("defender> ").strip().split()
+                return parse_line(inp("defender> "))
             except EOFError:
                 return "pass", None
-            if not parts or parts[0] == "pass":
-                return "pass", None
-            if parts[0] not in DEF_ACTIONS:
-                out(f"unknown action {parts[0]!r}")
+            except ValueError as e:
+                out(str(e))
                 continue
-            try:
-                node = int(parts[1]) if len(parts) > 1 else None
-            except ValueError:
-                out(f"bad node {parts[1]!r}")
-                continue
-            return parts[0], node
 
     return policy
 
