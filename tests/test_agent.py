@@ -2,12 +2,13 @@ import numpy as np
 
 from artai.agent.dqn import DQNAgent
 from artai.agent.qlearn import QLearner
+from artai.agent.baselines import RandomAgent
 from artai.env.defender import NoOpDefender, make
 from artai.env.redteam_env import RedTeamEnv
 
 
 def _qlearn_episode(agent, env, eps):
-    _, info = env.reset(seed=None)
+    _, info = env.reset()
     key = env.state_key()
     won = False
     while True:
@@ -21,19 +22,35 @@ def _qlearn_episode(agent, env, eps):
             return won
 
 
-def test_qlearn_improves_vs_defender():
-    """The learning contract: win rate late in training beats early."""
-    env = RedTeamEnv(defender=make("patch_on_alert"))
+def test_qlearn_learns_fixed_scenario():
+    """Learning contract: trained on a pinned scenario vs a patterned
+    defender, the policy must outscore random play on identical luck —
+    paired episode rewards, not raw wins (speed and stealth count)."""
+    env = RedTeamEnv(defender=make("patch_on_alert"), scenario_seed=9)
     agent = QLearner(env.action_space.n, seed=0)
-    early, late = 0, 0
-    for ep in range(240):
-        eps = max(0.05, 1.0 - ep / 160)
-        won = _qlearn_episode(agent, env, eps)
-        if ep < 40:
-            early += won
-        elif ep >= 200:
-            late += won
-    assert late > early
+    for ep in range(300):
+        eps = max(0.05, 1.0 - ep / 210)
+        _qlearn_episode(agent, env, eps)
+
+    trained, baseline = [], []
+    for rep in range(40):
+        for tag in ("trained", "baseline"):
+            _, info = env.reset(seed=1000 + rep)  # same luck for both
+            key = env.state_key()
+            rand = RandomAgent(seed=rep)
+            total = 0.0
+            while True:
+                a = (agent.act(key, info["action_mask"], 0.0) if tag == "trained"
+                     else rand.act(None, info["action_mask"]))
+                _, r, term, trunc, info = env.step(a)
+                key = env.state_key()
+                total += r
+                if term or trunc:
+                    break
+            (trained if tag == "trained" else baseline).append(total)
+
+    diff = np.asarray(trained) - np.asarray(baseline)
+    assert diff.mean() > 2.0
 
 
 def test_qlearn_respects_mask_and_roundtrips(tmp_path):
