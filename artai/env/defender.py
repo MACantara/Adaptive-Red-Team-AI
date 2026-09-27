@@ -39,9 +39,12 @@ class PatchOnAlertDefender:
 
     name = "patch_on_alert"
 
+    def __init__(self, probability: float = 1.0):
+        self.probability = probability
+
     def act(self, view, rng):
         alerts = view["alert_totals"]
-        if not alerts:
+        if not alerts or rng.random() >= self.probability:
             return "pass", None
         target = max(alerts, key=alerts.get)
         if view["nodes"][target].vuln_count:
@@ -64,10 +67,21 @@ class ScanAndReimageDefender:
         return "reimage", max(alerts, key=alerts.get)
 
 
-def make(name: str, **kw):
-    return {
+TIER_PROB = {1: 0.3, 2: 0.6, 3: 0.9}
+
+
+def make(name: str, difficulty: int | None = None, **kw):
+    cls = {
         "noop": NoOpDefender,
         "random": RandomDefender,
         "patch_on_alert": PatchOnAlertDefender,
         "scan_and_reimage": ScanAndReimageDefender,
-    }[name](**kw)
+    }[name]
+    if difficulty is not None:
+        if difficulty not in TIER_PROB:
+            raise ValueError(f"difficulty must be 1-3, got {difficulty}")
+        if name != "noop":
+            kw.setdefault("probability", TIER_PROB[difficulty])
+    d = cls(**kw)
+    d.difficulty = difficulty
+    return d

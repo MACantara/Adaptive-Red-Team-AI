@@ -106,3 +106,26 @@ def test_qlearn_rows_separate_archetypes():
                 break
     archetypes = {k[-1] for k in agent.table}
     assert len(archetypes) >= 2, f"single archetype: {archetypes}"
+
+
+def test_difficulty_tiers_are_measurable():
+    """Same attacker on sprawl: tier-3 reimager costs more reward than
+    tier-1 on identical episode seeds."""
+    import numpy as np
+    means = {}
+    for tier in (1, 3):
+        env = RedTeamEnv(scenario_seed=11, n_workstations=4, n_servers=4,
+                         defender=make("scan_and_reimage", difficulty=tier))
+        rewards = []
+        for rep in range(30):
+            _, info = env.reset(seed=500 + rep)
+            total = 0.0
+            while True:
+                _, r, term, trunc, info = env.step(
+                    heuristic_action(info["action_mask"], env.max_nodes))
+                total += r
+                if term or trunc:
+                    break
+            rewards.append(total)
+        means[tier] = float(np.mean(rewards))
+    assert means[3] < means[1], f"tier3 {means[3]:.2f} !< tier1 {means[1]:.2f}"

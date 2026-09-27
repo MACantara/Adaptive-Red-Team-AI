@@ -58,8 +58,8 @@ def train(episodes: int, run_dir: Path, algo: str = "qlearn",
                 defender = make_defender("noop")
             else:
                 defender = make_defender(
-                    DEFENDER_POPULATION[rng.integers(len(DEFENDER_POPULATION))]
-                )
+                    DEFENDER_POPULATION[rng.integers(len(DEFENDER_POPULATION))],
+                    difficulty=scen["difficulty"])
             env.defender = defender
             obs, info = env.reset(seed=seed + ep)  # reproducible runs
             eps = max(eps_end, eps_start - (eps_start - eps_end) * ep / max(eps_decay, 1))

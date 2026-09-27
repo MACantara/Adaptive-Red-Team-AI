@@ -68,9 +68,11 @@ _SCENARIOS = Path(__file__).resolve().parent.parent / "kb" / "scenarios.yaml"
 def load_scenario(spec: str | int | None, path: Path | None = None) -> dict:
     """Resolve a scenario: name from kb/scenarios.yaml, int seed, or None."""
     if spec is None:
-        return {"seed": None, "n_workstations": 3, "n_servers": 3}
+        return {"seed": None, "n_workstations": 3, "n_servers": 3,
+                "defender": None, "difficulty": 1}
     if isinstance(spec, int) or (isinstance(spec, str) and spec.isdigit()):
-        return {"seed": int(spec), "n_workstations": 3, "n_servers": 3}
+        return {"seed": int(spec), "n_workstations": 3, "n_servers": 3,
+                "defender": None, "difficulty": 1}
     raw = yaml.safe_load((path or _SCENARIOS).read_text(encoding="utf-8"))
     if spec not in raw:
         raise ValueError(
@@ -80,4 +82,6 @@ def load_scenario(spec: str | int | None, path: Path | None = None) -> dict:
         "seed": entry.get("seed"),
         "n_workstations": int(entry.get("n_workstations", 3)),
         "n_servers": int(entry.get("n_servers", 3)),
+        "defender": entry.get("defender"),
+        "difficulty": int(entry.get("difficulty", 1)),
     }

@@ -12,7 +12,7 @@ ATTACKER_BURST = 4  # attacker steps per defender turn
 
 
 def run_session(attacker, env, defender_policy, eps=0.05, max_turns=40,
-                train_lr=None):
+                train_lr=None, difficulty=None):
     """Play one game. defender_policy: callable(view, state) -> (action, node).
 
     attacker: object with act(key, mask, eps); if it also has update() and
@@ -66,10 +66,10 @@ def run_session(attacker, env, defender_policy, eps=0.05, max_turns=40,
     finally:
         env.defender = prev_defender
 
-    return debrief(env, log, turn)
+    return debrief(env, log, turn, difficulty)
 
 
-def debrief(env, log, turns: int) -> dict:
+def debrief(env, log, turns: int, difficulty=None) -> dict:
     """ATT&CK-flavored post-game report."""
     attempted = env.technique_log
     detected = env.detection_log
@@ -82,6 +82,7 @@ def debrief(env, log, turns: int) -> dict:
         "techniques_detected": detected,
         "techniques_undetected": [t for t in attempted if t not in detected],
         "alerts_raised": sum(1 for e in log if e.get("detected")),
+        "difficulty": difficulty,
         "defender_actions": [e for e in log if e["actor"] == "defender"],
         "log": log,
     }

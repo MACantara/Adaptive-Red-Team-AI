@@ -23,8 +23,11 @@ from artai.profiles import policy_path
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--defender", default="random",
-                   choices=["human", "script", *DEF_NAMES])
+    p.add_argument("--defender", default=None,
+                   choices=["human", "script", *DEF_NAMES],
+                   help="defender policy; defaults to the scenario's own")
+    p.add_argument("--difficulty", type=int, choices=(1, 2, 3), default=None,
+                   help="defender tier; defaults to the scenario's own")
     p.add_argument("--scenario", default="training_ground",
                    help="scenario name, a map seed, or 'none'")
     p.add_argument("--policy", type=Path, default=None,
@@ -59,12 +62,17 @@ def main():
 
     script_lines = (args.script.read_text().splitlines()
                     if args.script else None)
-    defender = gdef.resolve(args.defender, script_lines)
+    defender_name = args.defender or scen.get("defender") or "random"
+    difficulty = args.difficulty or scen["difficulty"]
+    defender = gdef.resolve(defender_name, script_lines,
+                            difficulty=difficulty)
 
     report = run_session(agent, env, defender, eps=args.eps,
-                         train_lr=0.1 if args.learn else None)
+                         train_lr=0.1 if args.learn else None,
+                         difficulty=difficulty)
 
-    print(f"\nresult: {report['result']} in {report['turns']} turns")
+    print(f"\nresult: {report['result']} in {report['turns']} turns "
+          f"(defender {defender_name}, tier {difficulty})")
     print(f"attempted: {report['techniques_attempted']}")
     print(f"detected : {report['techniques_detected']}")
     print(f"unseen   : {report['techniques_undetected']}")

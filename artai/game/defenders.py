@@ -10,9 +10,9 @@ from artai.env.defender import DEF_NAMES, make as make_env_defender
 from artai.env.redteam_env import DEF_ACTIONS
 
 
-def scripted(name: str, seed: int = 0):
+def scripted(name: str, seed: int = 0, difficulty: int | None = None):
     """Adapter: env defender policies usable in the turn-based game."""
-    d = make_env_defender(name)
+    d = make_env_defender(name, difficulty=difficulty)
     rng = np.random.default_rng(seed)
     return lambda view: d.act(view, rng)
 
@@ -67,7 +67,8 @@ def human(out=print, inp=input):
     return policy
 
 
-def resolve(spec: str, script_lines=None, seed: int = 0):
+def resolve(spec: str, script_lines=None, seed: int = 0,
+            difficulty: int | None = None):
     if spec == "human":
         return human()
     if spec == "script":
@@ -75,5 +76,5 @@ def resolve(spec: str, script_lines=None, seed: int = 0):
             raise ValueError("--defender script needs --script <file>")
         return from_lines(script_lines)
     if spec in DEF_NAMES:
-        return scripted(spec, seed=seed)
+        return scripted(spec, seed=seed, difficulty=difficulty)
     raise ValueError(f"unknown defender {spec!r}")

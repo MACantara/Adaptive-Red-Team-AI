@@ -1,17 +1,24 @@
 # Named scenario packs — a scenario pins the map topology (and size) so
 # training is per-arena and checkpoints are comparable.
-# Fields: seed (map seed), n_workstations, n_servers.
+# Fields: seed (map seed), n_workstations, n_servers, defender (the
+# scripted opposition by default), difficulty (tier 1-3 -> act probability).
 training_ground:
   seed: 9
   n_workstations: 3
   n_servers: 3
+  defender: patch_on_alert
+  difficulty: 1
 
 contested_dmz:
   seed: 3
   n_workstations: 3
   n_servers: 3
+  defender: patch_on_alert
+  difficulty: 2
 
 sprawl:
   seed: 11
   n_workstations: 4
   n_servers: 4
+  defender: scan_and_reimage
+  difficulty: 3
