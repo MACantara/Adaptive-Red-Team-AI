@@ -53,6 +53,45 @@ def test_qlearn_learns_fixed_scenario():
     assert diff.mean() > 2.0
 
 
+def test_qlearn_adapts_after_defender_swap():
+    """Adaptation contract: train vs defender A, hot-swap to defender B.
+    After re-training, the adapted table must outscore its own frozen
+    pre-swap snapshot on identical luck — 'learns from your moves',
+    falsifiable."""
+    env = RedTeamEnv(scenario_seed=9)
+    agent = QLearner(env.action_space.n, seed=0)
+
+    env.defender = make("patch_on_alert")
+    for ep in range(300):
+        _qlearn_episode(agent, env, max(0.05, 1.0 - ep / 210))
+
+    frozen = QLearner(env.action_space.n, seed=1)
+    frozen.table = {k: v.copy() for k, v in agent.table.items()}
+
+    env.defender = make("scan_and_reimage")
+    for _ in range(400):
+        _qlearn_episode(agent, env, 0.2)
+
+    adapted_r, frozen_r = [], []
+    for rep in range(40):
+        for tag in ("adapted", "frozen"):
+            _, info = env.reset(seed=1000 + rep)  # same luck for both
+            key = env.state_key()
+            total = 0.0
+            while True:
+                a = (agent if tag == "adapted" else frozen).act(
+                    key, info["action_mask"], 0.0)
+                _, r, term, trunc, info = env.step(a)
+                key = env.state_key()
+                total += r
+                if term or trunc:
+                    break
+            (adapted_r if tag == "adapted" else frozen_r).append(total)
+
+    diff = np.asarray(adapted_r) - np.asarray(frozen_r)
+    assert diff.mean() > 2.0
+
+
 def test_qlearn_respects_mask_and_roundtrips(tmp_path):
     env = RedTeamEnv(defender=NoOpDefender())
     agent = QLearner(env.action_space.n, seed=0)
