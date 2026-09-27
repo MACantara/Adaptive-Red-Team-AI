@@ -6,7 +6,7 @@ gets one action based on alerts alone. The defender never sees ownership,
 only noise. That asymmetry is the game.
 """
 
-from artai.env.redteam_env import ACTIONS, DEF_ACTIONS, decode
+from artai.env.redteam_env import ACTIONS, decode
 
 ATTACKER_BURST = 4  # attacker steps per defender turn
 

@@ -1,8 +1,7 @@
-import numpy as np
 
 from artai.agent.baselines import heuristic_action
 from artai.env.defender import ScanAndReimageDefender, make
-from artai.env.redteam_env import ACTIONS, RedTeamEnv
+from artai.env.redteam_env import RedTeamEnv
 
 
 def _run(env, seed):
