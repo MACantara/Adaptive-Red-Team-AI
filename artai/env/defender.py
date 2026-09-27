@@ -30,10 +30,17 @@ class RandomDefender:
 
 
 class PatchOnAlertDefender:
+    """Patch triage: fixes the host with the most lifetime noise.
+
+    Uses cumulative alerts — a SOC patches chronically suspicious boxes,
+    not whatever blinked last. The edge node draws constant noise yet is
+    unpatchable, which leaves the attacker working room.
+    """
+
     name = "patch_on_alert"
 
     def act(self, view, rng):
-        alerts = view["alerts"]
+        alerts = view["alert_totals"]
         if not alerts:
             return "pass", None
         target = max(alerts, key=alerts.get)

@@ -40,11 +40,26 @@ def test_reimage_keeps_persistent_foothold():
 def test_isolate_blocks_reachability():
     env = RedTeamEnv()
     env.reset(seed=0)
+    # own a workstation; its deeper neighbors are reachable only through it
+    ws = env.net.nodes[1]
+    ws.owned = True
+    deeper = [m for m in env.net.links[1] if env.net.nodes[m].tier >= 2]
+    assert deeper and all(env._reachable(m) for m in deeper)
+    env._apply_defender("isolate", 1)
+    assert not any(env._reachable(m) for m in deeper)
+
+
+def test_tier0_immune_to_isolate_and_patch():
+    """The edge is the internet — evictable via reimage, never hardenable."""
+    env = RedTeamEnv()
+    env.reset(seed=0)
     n0 = env.net.nodes[0]
     n0.owned = True
+    vulns_before = list(n0.vulns)
     env._apply_defender("isolate", 0)
-    for m in env.net.links[0]:
-        assert not env._reachable(m)
+    env._apply_defender("patch", 0)
+    assert not n0.isolated
+    assert n0.vulns == vulns_before
 
 
 def test_active_defender_hurts_heuristic():

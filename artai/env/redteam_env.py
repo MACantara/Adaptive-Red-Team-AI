@@ -41,10 +41,12 @@ class RedTeamEnv(gym.Env):
     metadata = {"render_modes": []}
 
     def __init__(self, n_workstations=3, n_servers=3, max_steps=120,
-                 defender=None, catalog=None):
+                 defender=None, catalog=None, scenario_seed=None):
         self.n_ws, self.n_srv = n_workstations, n_servers
         self.max_steps = max_steps
         self.defender = defender
+        # pinned topology for scenario-pack training; None = fresh map each reset
+        self.scenario_seed = scenario_seed
         self.catalog = catalog or load_catalog()
         self.max_nodes = 3 + n_workstations + n_servers  # edge + dc + cj + tiers
         self.rng = np.random.default_rng()
@@ -75,8 +77,14 @@ class RedTeamEnv(gym.Env):
         super().reset(seed=seed)
         if seed is not None:
             self.rng = np.random.default_rng(seed)
+        if self.scenario_seed is not None:
+            topo_seed = self.scenario_seed  # scenario mode: seed varies luck, not map
+        elif seed is not None:
+            topo_seed = seed
+        else:
+            topo_seed = int(self.rng.integers(1 << 31))
         self.net = net_mod.generate(
-            seed=seed if seed is not None else int(self.rng.integers(1 << 31)),
+            seed=topo_seed,
             n_workstations=self.n_ws, n_servers=self.n_srv,
         )
         self.creds, self.step_count = [], 0
@@ -111,6 +119,8 @@ class RedTeamEnv(gym.Env):
             reward += self._det_reward
 
         if self.defender is not None:
+            for n in self.net.nodes.values():
+                n.alert = max(0.0, n.alert - 0.4)  # alerts age out
             d_name, d_node = self.defender.act(self._defender_view(), self.rng)
             self._apply_defender(d_name, d_node)
 
@@ -194,11 +204,14 @@ class RedTeamEnv(gym.Env):
         if name == "exploit":
             if not (node.vulns_known and arg < len(node.vulns)):
                 return None
-            return self.catalog.get(node.vulns[arg].technique_id)
+            t = self.catalog.get(node.vulns[arg].technique_id)
+            # a vuln entry pointing at a non-exploit technique is a dead slot
+            return t if t is not None and t.action == "exploit" else None
         if name == "privesc":
             if arg >= len(node.local_vulns):
                 return None
-            return self.catalog.get(node.local_vulns[arg].technique_id)
+            t = self.catalog.get(node.local_vulns[arg].technique_id)
+            return t if t is not None and t.action == "privesc" else None
         if name == "lateral":
             for t in self.catalog.values():
                 if t.action == "lateral" and node.id in self.creds:
@@ -271,6 +284,7 @@ class RedTeamEnv(gym.Env):
         p = tech.detectability * (2.0 if node.decoy else 1.0)
         if self.rng.random() < min(p, 1.0):
             node.alert += 1.0
+            node.alert_total += 1.0
             self.detected_last = 1.0
             self.detection_log.append(tech.id)
             self._det_reward += DETECT_PENALTY
@@ -280,6 +294,7 @@ class RedTeamEnv(gym.Env):
     def _defender_view(self) -> dict:
         return {
             "alerts": {n.id: n.alert for n in self.net.nodes.values() if n.alert > 0},
+            "alert_totals": {n.id: n.alert_total for n in self.net.nodes.values() if n.alert_total > 0},
             "nodes": self.net.nodes,
         }
 
@@ -296,6 +311,7 @@ class RedTeamEnv(gym.Env):
             node.isolated = True
         elif action == "reimage":
             node.alert = 0.0
+            node.alert_total = 0.0
             node.vulns_known = node.creds_known = False
             if node.persistent:
                 node.root = False
