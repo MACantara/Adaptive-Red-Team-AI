@@ -42,13 +42,16 @@ Size: small. Files: `defender.py`, `scenarios.yaml`, `catalog.py`.
 
 ## Tier 2 — generalization (the real research problem)
 
-### Masked DQN that earns its place
-`agent/dqn.py` exists but is unproven beyond mechanics. The honest gate:
-train on a *population of random maps*, eval on held-out seeds, beat the
-tabular baseline's transfer. If it can't, keep tabular and delete it —
-the env doesn't owe DQN a win. Likely needs: smaller observation space,
-double-DQN + dueling heads, prioritized replay, ≥10k episodes.
-Size: large. Files: `dqn.py`, `train.py`, new eval harness.
+### Masked DQN that earns its place — PASSED
+Gate verdict (500-episode spike, double-DQN only): on 60 held-out map
+seeds vs patch_on_alert, DQN beat the shared-table baseline by
+**+11.1 mean reward** (+9.6 over random baseline; tabular transfer was
+*worse than random* at -1.5 — exact-match keys can't fire on new maps).
+Win rates were ~equal; the margin is efficiency — faster, quieter wins.
+DQN stays as the generalization path. Tabular remains the default for
+pinned-scenario play, where it converges harder.
+Size: large. Files: `dqn.py` (double-DQN landed), `eval.py`,
+`gate_probe.py` (the runnable evidence).
 
 ### Curriculum training
 Ordered population: NoOp → patch_on_alert → scan_and_reimage → mixed.

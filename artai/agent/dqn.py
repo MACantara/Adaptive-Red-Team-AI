@@ -71,9 +71,13 @@ class DQNAgent:
 
         q = self.online(s).gather(1, a.unsqueeze(1)).squeeze(1)
         with torch.no_grad():
-            q2 = self.target(s2)
-            q2[mask2 == 0] = -1e9
-            q2max = q2.max(1).values.clamp(min=-1e6)
+            # double DQN: online net picks the action, target net scores it —
+            # decouples selection from evaluation, tames overestimation
+            q2_online = self.online(s2)
+            q2_online[mask2 == 0] = -1e9
+            a_star = q2_online.argmax(1, keepdim=True)
+            q2max = self.target(s2).gather(1, a_star).squeeze(1)
+            q2max = q2max.clamp(min=-1e6)
             target = r + self.gamma * (1 - done) * q2max
 
         loss = nn.functional.smooth_l1_loss(q, target)
