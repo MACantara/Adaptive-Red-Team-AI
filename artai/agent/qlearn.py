@@ -62,6 +62,7 @@ class QLearner:
             self._bellman(*t)
 
     def save(self, path: Path):
+        path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "wb") as f:
             pickle.dump({"table": self.table, "updates": self.updates}, f)
 

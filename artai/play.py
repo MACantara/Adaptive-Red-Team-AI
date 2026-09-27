@@ -18,6 +18,7 @@ from artai.env.defender import DEF_NAMES
 from artai.env.redteam_env import RedTeamEnv
 from artai.game import defenders as gdef
 from artai.game.session import run_session
+from artai.profiles import policy_path
 
 
 def main():
@@ -26,7 +27,11 @@ def main():
                    choices=["human", "script", *DEF_NAMES])
     p.add_argument("--scenario", default="training_ground",
                    help="scenario name, a map seed, or 'none'")
-    p.add_argument("--policy", type=Path, default=Path("policy.pkl"))
+    p.add_argument("--policy", type=Path, default=None,
+                   help="explicit checkpoint path; overrides --player-id")
+    p.add_argument("--player-id", default=None,
+                   help="use policies/<scenario>/<id>.pkl — the adversary "
+                        "remembers you across sessions")
     p.add_argument("--script", type=Path, default=None,
                    help="defender script file, one 'action node' per line")
     p.add_argument("--eps", type=float, default=0.05)
@@ -40,14 +45,17 @@ def main():
     env = RedTeamEnv(scenario_seed=scen["seed"],
                      n_workstations=scen["n_workstations"],
                      n_servers=scen["n_servers"])
+    policy = args.policy or (
+        policy_path(args.scenario, args.player_id)
+        if args.player_id else Path("policy.pkl"))
     agent = QLearner(env.action_space.n, seed=0)
-    if args.policy.exists():
+    if policy.exists():
         # checkpoints are trusted artifacts — pickle load, don't point at
         # files you didn't produce
-        agent.load(args.policy)
-        print(f"loaded {args.policy} ({len(agent.table)} states)")
+        agent.load(policy)
+        print(f"loaded {policy} ({len(agent.table)} states)")
     else:
-        print(f"no checkpoint at {args.policy} — playing untrained policy")
+        print(f"no checkpoint at {policy} — playing untrained policy")
 
     script_lines = (args.script.read_text().splitlines()
                     if args.script else None)
@@ -64,8 +72,8 @@ def main():
         args.debrief.write_text(json.dumps(report, indent=2))
         print(f"debrief -> {args.debrief}")
     if args.learn:
-        agent.save(args.policy)
-        print(f"adapted policy -> {args.policy} ({len(agent.table)} states)")
+        agent.save(policy)
+        print(f"adapted policy -> {policy} ({len(agent.table)} states)")
     return 0
 
 

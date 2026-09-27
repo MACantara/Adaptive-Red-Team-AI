@@ -17,6 +17,7 @@ from artai.agent.qlearn import QLearner
 from artai.env.catalog import load_scenario
 from artai.env.defender import make as make_defender
 from artai.env.redteam_env import RedTeamEnv
+from artai.profiles import policy_path
 
 DEFENDER_POPULATION = ("noop", "random", "patch_on_alert", "scan_and_reimage")
 
@@ -24,6 +25,7 @@ DEFENDER_POPULATION = ("noop", "random", "patch_on_alert", "scan_and_reimage")
 def train(episodes: int, run_dir: Path, algo: str = "qlearn",
           resume: Path | None = None, seed: int = 0,
           scenario: str | int | None = None,
+          player_id: str | None = None,
           eps_start=1.0, eps_end=0.05, eps_decay_episodes=0.6,
           quiet: bool = False):
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -34,7 +36,9 @@ def train(episodes: int, run_dir: Path, algo: str = "qlearn",
 
     if algo == "qlearn":
         agent = QLearner(env.action_space.n, seed=seed)
-        ckpt_path = resume or run_dir / "policy.pkl"
+        ckpt_path = resume or (
+            policy_path(str(scenario or "none"), player_id)
+            if player_id else run_dir / "policy.pkl")
     else:
         agent = DQNAgent(env.observation_space.shape[0],
                          env.action_space.n, seed=seed)
@@ -113,9 +117,12 @@ def main():
     p.add_argument("--scenario", default=None,
                    help="scenario name from kb/scenarios.yaml, a map seed, "
                         "or omit for a fresh map each episode")
+    p.add_argument("--player-id", default=None,
+                   help="checkpoint to policies/<scenario>/<id>.pkl")
     args = p.parse_args()
     out = train(args.episodes, Path("runs") / args.run, algo=args.algo,
-                resume=args.resume, seed=args.seed, scenario=args.scenario)
+                resume=args.resume, seed=args.seed, scenario=args.scenario,
+                player_id=args.player_id)
     print(json.dumps(out))
 
 
