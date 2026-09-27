@@ -19,12 +19,10 @@ python -m artai.train --episodes 2000 --scenario training_ground --run my_run
 python -m artai.train --episodes 2000 --scenario training_ground --curriculum
 
 # play blue team against the trained policy (it learns your moves)
-python -m artai.play --defender human --scenario training_ground \
-    --policy runs/my_run/policy.pkl --learn --debrief debrief.json
+python -m artai.play --defender human --scenario training_ground --policy runs/my_run/policy.pkl --learn --debrief debrief.json
 
 # watch it live in the TUI — map on the left, event feed on the right
-python -m artai.play --defender patch_on_alert --scenario contested_dmz \
-    --policy runs/my_run/policy.pkl --ui textual
+python -m artai.play --defender patch_on_alert --scenario contested_dmz --policy runs/my_run/policy.pkl --ui textual
 
 # per-player profiles: the adversary remembers *you*
 python -m artai.train --episodes 500 --scenario training_ground --player-id alice
