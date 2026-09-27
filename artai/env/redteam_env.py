@@ -404,6 +404,39 @@ class RedTeamEnv(gym.Env):
         rate = active / total
         return (dominant, 0 if rate < 0.15 else 1 if rate < 0.45 else 2)
 
+    ARCHETYPES = ("unknown", "quiet", "patcher", "reimager", "erratic")
+
+    def defender_guess(self, min_samples: int = 10) -> tuple:
+        """Heuristic archetype guess from def_hist -> (name, confidence).
+
+        Confidence is the score margin over the runner-up; low-margin
+        observations stay 'unknown' rather than forcing a wrong label.
+        """
+        total = self.def_hist.sum()
+        active = self.def_hist[1:].sum()
+        if total < min_samples:
+            return ("unknown", 0.0)
+        if not active:
+            return ("quiet", 1.0)
+        kinds = {i for i in range(1, len(DEF_ACTIONS))
+                 if self.def_hist[i] > 0}
+        pi, ri = DEF_ACTIONS.index("patch"), DEF_ACTIONS.index("reimage")
+        # No scripted policy mixes these: patch+reimage together, or any
+        # decoy/investigate, means a generalist (random or human).
+        mixed = ({pi, ri} <= kinds or DEF_ACTIONS.index("decoy") in kinds
+                 or DEF_ACTIONS.index("investigate") in kinds)
+        shares = self.def_hist[1:] / active
+        scores = {
+            "quiet": max(0.0, 1.0 - 3.0 * (active / total)),
+            "patcher": shares[pi - 1] + 0.5 * shares[
+                DEF_ACTIONS.index("isolate") - 1],
+            "reimager": shares[ri - 1],
+            "erratic": 1.0 if mixed else 1.0 - float(shares.max()),
+        }
+        top, *rest = sorted(scores.items(), key=lambda kv: -kv[1])
+        margin = top[1] - rest[0][1]
+        return (top[0] if margin >= 0.15 else "unknown", margin)
+
     def _obs(self) -> np.ndarray:
         n = self.max_nodes
         obs = np.zeros(n * NODE_FEATURES + 2 + 2 * len(DEF_ACTIONS) + 1,

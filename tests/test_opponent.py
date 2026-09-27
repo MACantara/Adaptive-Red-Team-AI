@@ -1,6 +1,7 @@
 """Opponent modeling: defender signature in the state key, archetype
 classification, and archetype-conditioned learning."""
 
+from artai.agent.baselines import heuristic_action
 from artai.env.defender import make
 from artai.env.redteam_env import DEF_ACTIONS, RedTeamEnv
 
@@ -40,3 +41,25 @@ def test_signature_buckets():
     assert env.defender_signature() == (DEF_ACTIONS.index("patch"), 1)
     env.def_hist[DEF_ACTIONS.index("pass")] = 2
     assert env.defender_signature() == (DEF_ACTIONS.index("patch"), 2)
+
+
+def test_defender_guess_identifies_scripted_defenders():
+    """Heuristic attacker for ~40 steps gives each defender's policy away."""
+    expected = {"noop": "quiet", "random": "erratic",
+                "patch_on_alert": "patcher",
+                "scan_and_reimage": "reimager"}
+    correct = 0
+    for name, want in expected.items():
+        env = _env(name)
+        _, info = env.reset(seed=0)
+        for _ in range(40):
+            _, _, term, trunc, info = env.step(
+                heuristic_action(info["action_mask"], env.max_nodes))
+            if term or trunc:
+                break
+        guess, conf = env.defender_guess()
+        if guess == want:
+            correct += 1
+        else:
+            print(f"{name}: guessed {guess} (conf {conf:.2f}), want {want}")
+    assert correct >= 3
