@@ -1,0 +1,11 @@
+# Campaign definitions: ordered legs. Each leg pins (scenario, defender,
+# difficulty) — omission inherits the scenario's own. The attacker's table
+# carries between legs, so a campaign is "same agent, escalating pressure".
+# NOTE: legs must share map dimensions — Q-table rows are indexed by the
+# scenario's action encoding; mixing 3+3 and 4+4 maps is rejected.
+escalation_arc:
+  legs:
+    - scenario: training_ground
+    - scenario: contested_dmz
+    - scenario: contested_dmz
+      difficulty: 3
