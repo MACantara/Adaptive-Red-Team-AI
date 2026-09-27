@@ -388,6 +388,7 @@ class RedTeamEnv(gym.Env):
             int(self.detected_last),
             sum(n.alert > 0 for n in self.net.nodes.values()),
             self.defender_signature(),
+            self.ARCHETYPES.index(self.defender_guess()[0]),
         )
 
     def defender_signature(self) -> tuple:
